@@ -1,0 +1,48 @@
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: smartbank-mysql
+
+    environment:
+      MYSQL_DATABASE: smartbank
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+
+    
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_PASSWORD}"]
+      timeout: 5s
+      retries: 10
+      interval: 5s
+      start_period: 10s
+
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/backend.Dockerfile
+
+    container_name: smartbank-backend
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/smartbank
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+
+    ports:
+      - "8080:8080"
+
+
+volumes:
+  mysql_data:

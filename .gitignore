@@ -1,0 +1,71 @@
+# ==============================
+# Java / Spring Boot
+# ==============================
+
+backend/target/
+*.class
+
+# Maven
+.mvn/timing.properties
+
+# ==============================
+# Environment / Secrets
+# ==============================
+
+.env
+.env.*
+!.env.example
+
+# Local / production Spring configuration
+**/application-local.properties
+**/application-prod.properties
+
+# ==============================
+# IntelliJ IDEA
+# ==============================
+
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# ==============================
+# VS Code
+# ==============================
+
+.vscode/
+
+# ==============================
+# Java / Maven logs
+# ==============================
+
+*.log
+
+# ==============================
+# Flutter
+# ==============================
+
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/.pub-cache/
+
+# Flutter Android generated files
+mobile/android/.gradle/
+mobile/android/local.properties
+
+# ==============================
+# OS files
+# ==============================
+
+.DS_Store
+Thumbs.db
+
+# ==============================
+# Test / Coverage generated files
+# ==============================
+
+backend/target/site/
+backend/target/surefire-reports/
