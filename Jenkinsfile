@@ -19,15 +19,25 @@ pipeline {
             }
         }
         stage('SonarQube Analysis') {
-            steps {
-                dir('backend') {
-                    withSonarQubeEnv('SonarQube') {
-                        sh './mvnw sonar:sonar -Dsonar.projectKey=Smartbank-backend'
-                    }
+         steps {
+        dir('backend') {
+            withSonarQubeEnv('SonarQube') {
+                withCredentials([
+                    string(
+                        credentialsId: 'sb-sq',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                        ./mvnw sonar:sonar \
+                          -Dsonar.projectKey=Smartbank-backend \
+                          -Dsonar.token=$SONAR_TOKEN
+                    '''
                 }
             }
         }
-
+    }
+}
         stage('Quality Gate') {
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
