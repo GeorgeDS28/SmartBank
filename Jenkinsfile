@@ -53,7 +53,7 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
-                         trap 'rm -f .jenkins.env' EXIT
+                        trap 'rm -f .jenkins.env' EXIT
 
                         cat > .jenkins.env <<EOF
 DB_PASSWORD=$DB_PASSWORD
@@ -87,7 +87,7 @@ EOF
                     curl -f http://localhost:8081/v3/api-docs > /dev/null
 
                     echo "SmartBank deployment verified successfully."
-                }
+                '''
             }
         }
 
@@ -103,4 +103,3 @@ EOF
         }
     }
 }
-
