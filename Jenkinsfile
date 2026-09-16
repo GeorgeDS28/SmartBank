@@ -74,24 +74,51 @@ EOF
 
         stage('Deployment Verification') {
             steps {
-                sh '''
-                    echo "Checking SmartBank containers..."
+                withCredentials([
+                    string(
+                        credentialsId: 'smartbank-db-password',
+                        variable: 'DB_PASSWORD'
+                    ),
+                    string(
+                        credentialsId: 'smartbank-jwt-secret',
+                        variable: 'JWT_SECRET'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        trap 'rm -f .jenkins.env' EXIT
 
-                    docker compose \
-                      -f docker/docker-compose.yml \
-                      ps
+                        cat > .jenkins.env <<EOF
+DB_PASSWORD=$DB_PASSWORD
+JWT_SECRET=$JWT_SECRET
+JWT_EXPIRATION=86400000
+EOF
+                        echo "Checking SmartBank containers..."
 
-                    echo "Waiting for backend to start..."
-                    sleep 15
+                        docker compose \
+                          --env-file .jenkins.env \
+                          -f docker/docker-compose.yml \
+                          ps
 
-                    curl -f http://localhost:8081/v3/api-docs > /dev/null
+                        echo "Waiting for SmartBank backend to become ready..."
 
-                    echo "SmartBank deployment verified successfully."
-                '''
+                        for i in $(seq 1 12); do
+                            if curl -fsS http://localhost:8081/v3/api-docs > /dev/null; then
+                                echo "SmartBank backend is ready."
+                                echo "SmartBank deployment verified successfully."
+                                exit 0
+                            fi
+
+                            echo "Backend not ready yet. Attempt $i/12..."
+                            sleep 10
+                        done
+
+                        echo "SmartBank backend failed to become ready."
+                        exit 1
+                    '''
+                }
             }
         }
-
-    }
 
     post {
         success {
