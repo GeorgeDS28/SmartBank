@@ -1,8 +1,6 @@
 pipeline {
     agent any
-
     stages {
-
         stage('Build & Test') {
             steps {
                 dir('backend') {
@@ -20,7 +18,6 @@ pipeline {
                 )
             }
         }
-
         stage('SonarQube Analysis') {
             steps {
                 dir('backend') {
@@ -60,7 +57,6 @@ DB_PASSWORD=$DB_PASSWORD
 JWT_SECRET=$JWT_SECRET
 JWT_EXPIRATION=86400000
 EOF
-
                         docker compose \
                           --env-file .jenkins.env \
                           -f docker/docker-compose.yml \
@@ -119,6 +115,7 @@ EOF
                 }
             }
         }
+    }
 
     post {
         success {
