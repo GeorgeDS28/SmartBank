@@ -37,5 +37,9 @@ public interface AccountService {
         WithdrawRequest request
             );
 
+    AccountResponse closeAccount(
+        String accountNumber
+            );
+
 
 }

@@ -186,6 +186,26 @@ public ResponseEntity<ErrorResponse> handleGoalNotFoundException(
 }
 
 
+ @ExceptionHandler(AccountNotEmptyException.class)
+    public ResponseEntity<ErrorResponse> handleAccountNotEmptyException(
+            AccountNotEmptyException ex,
+            HttpServletRequest request) {
+
+        ErrorResponse errorResponse = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.BAD_REQUEST.value(),
+                "Account Not Empty",
+                ex.getMessage(),
+                request.getRequestURI()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(errorResponse);
+    }
+
+
+
 
 @ExceptionHandler(InvalidCredentialsException.class)
 public ResponseEntity<ErrorResponse> handleInvalidCredentialsException(
@@ -204,6 +224,81 @@ public ResponseEntity<ErrorResponse> handleInvalidCredentialsException(
             .status(HttpStatus.UNAUTHORIZED)
             .body(errorResponse);
 }
+
+@ExceptionHandler(InvalidTransactionPinException.class)
+public ResponseEntity<ErrorResponse> handleInvalidTransactionPin(
+        InvalidTransactionPinException ex,
+        HttpServletRequest request) {
+
+    ErrorResponse response = new ErrorResponse(
+            LocalDateTime.now(),
+            HttpStatus.FORBIDDEN.value(),
+            "Incorrect Transaction PIN",
+            ex.getMessage(),
+            request.getRequestURI()
+    );
+
+    return ResponseEntity
+            .status(HttpStatus.FORBIDDEN)
+            .body(response);
+}
+
+
+@ExceptionHandler(TransactionPinLockedException.class)
+public ResponseEntity<ErrorResponse> handleTransactionPinLocked(
+        TransactionPinLockedException ex,
+        HttpServletRequest request) {
+
+    ErrorResponse response = new ErrorResponse(
+            LocalDateTime.now(),
+            HttpStatus.LOCKED.value(),
+            "Transaction PIN Locked",
+            ex.getMessage(),
+            request.getRequestURI()
+    );
+
+    return ResponseEntity
+            .status(HttpStatus.LOCKED)
+            .body(response);
+}
+
+
+@ExceptionHandler(TransactionPinNotConfiguredException.class)
+public ResponseEntity<ErrorResponse> handleTransactionPinNotConfigured(
+        TransactionPinNotConfiguredException ex,
+        HttpServletRequest request) {
+
+    ErrorResponse response = new ErrorResponse(
+            LocalDateTime.now(),
+            HttpStatus.PRECONDITION_REQUIRED.value(),
+            "Transaction PIN Not Configured",
+            ex.getMessage(),
+            request.getRequestURI()
+    );
+
+    return ResponseEntity
+            .status(HttpStatus.PRECONDITION_REQUIRED)
+            .body(response);
+}
+
+
+@ExceptionHandler(IllegalArgumentException.class)
+public ResponseEntity<ErrorResponse> handleIllegalArgumentException(
+        IllegalArgumentException ex,
+        HttpServletRequest request) {
+
+    ErrorResponse error = new ErrorResponse(
+            LocalDateTime.now(),
+            HttpStatus.BAD_REQUEST.value(),
+            "Invalid Request",
+            ex.getMessage(),
+            request.getRequestURI()
+    );
+
+    return ResponseEntity.badRequest().body(error);
+}
+
+
 
 
 

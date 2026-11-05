@@ -21,6 +21,8 @@ import com.smartbank.account.entity.AccountStatus;
 import com.smartbank.account.repository.AccountRepository;
 import com.smartbank.account.service.AccountHelperService;
 import com.smartbank.account.service.AccountService;
+import com.smartbank.account.service.AvailableBalanceService;
+import com.smartbank.exception.AccountNotEmptyException;
 import com.smartbank.exception.InactiveAccountException;
 import com.smartbank.exception.InsufficientBalanceException;
 import com.smartbank.transaction.dto.DepositRequest;
@@ -29,6 +31,7 @@ import com.smartbank.transaction.dto.WithdrawRequest;
 import com.smartbank.transaction.dto.WithdrawResponse;
 import com.smartbank.transaction.enums.TransactionType;
 import com.smartbank.transaction.service.TransactionService;
+import com.smartbank.transactionpin.service.TransactionPinService;
 import com.smartbank.user.entity.User;
 import com.smartbank.user.repository.UserRepository;
 
@@ -45,6 +48,8 @@ public class AccountServiceImpl implements AccountService {
     private final UserRepository userRepository;
     private final TransactionService transactionService;
     private final AccountHelperService accountHelperService;
+    private final AvailableBalanceService availableBalanceService;
+    private final TransactionPinService transactionPinService;
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -97,6 +102,8 @@ public class AccountServiceImpl implements AccountService {
             String accountNumber,
             DepositRequest request) {
 
+        transactionPinService.verifyPin(request.getPin());
+
         Account account = accountHelperService.getUserAccount(accountNumber);
 
         if (account.getStatus() != AccountStatus.ACTIVE) {
@@ -131,6 +138,8 @@ public class AccountServiceImpl implements AccountService {
             String accountNumber,
             WithdrawRequest request) {
 
+        transactionPinService.verifyPin(request.getPin());
+
         Account account = accountHelperService.getUserAccount(accountNumber);
 
         // Verify account is ACTIVE
@@ -145,6 +154,10 @@ public class AccountServiceImpl implements AccountService {
             log.warn("Insufficient balance");
             throw new InsufficientBalanceException("Insufficient balance");
         }
+
+        // Money parked in a savings goal is not spendable, even though it is
+        // still sitting on this account.
+        availableBalanceService.assertSpendable(amount);
 
         // Deduct balance
         account.setBalance(
@@ -183,6 +196,37 @@ public class AccountServiceImpl implements AccountService {
                 .accountType(account.getAccountType())
                 .balance(account.getBalance())
                 .status(account.getStatus())
+                .build();
+    }
+
+    @Override
+    public AccountResponse closeAccount(String accountNumber) {
+
+        Account account = accountHelperService.getUserAccount(accountNumber);
+
+        if (account.getStatus() == AccountStatus.CLOSED) {
+            throw new InactiveAccountException("Account is already closed");
+        }
+
+        // Closing keeps the whole transaction history, so the remaining money
+        // has to be withdrawn or transferred out instead of being written off.
+        if (account.getBalance().compareTo(BigDecimal.ZERO) > 0) {
+            log.warn("Attempt to close a funded account");
+            throw new AccountNotEmptyException(
+                    "Withdraw the remaining balance before closing this account.");
+        }
+
+        account.setStatus(AccountStatus.CLOSED);
+
+        Account updatedAccount = accountRepository.save(account);
+
+        log.info("Account closed successfully");
+
+        return AccountResponse.builder()
+                .accountNumber(updatedAccount.getAccountNumber())
+                .accountType(updatedAccount.getAccountType())
+                .balance(updatedAccount.getBalance())
+                .status(updatedAccount.getStatus())
                 .build();
     }
 

@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,6 +23,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+
+import com.smartbank.account.service.AvailableBalanceService;
 import com.smartbank.account.dto.AccountResponse;
 import com.smartbank.account.dto.CreateAccountRequest;
 import com.smartbank.account.entity.Account;
@@ -30,6 +34,7 @@ import com.smartbank.account.repository.AccountRepository;
 import com.smartbank.account.service.AccountHelperService;
 import com.smartbank.exception.InactiveAccountException;
 import com.smartbank.exception.InsufficientBalanceException;
+import com.smartbank.exception.InvalidTransactionPinException;
 import com.smartbank.transaction.dto.DepositRequest;
 import com.smartbank.transaction.dto.DepositResponse;
 import com.smartbank.transaction.dto.WithdrawRequest;
@@ -54,6 +59,12 @@ class AccountServiceImplTest {
     @Mock
     private AccountHelperService accountHelperService;
 
+     @Mock
+private AvailableBalanceService availableBalanceService;
+
+    @Mock
+    private com.smartbank.transactionpin.service.TransactionPinService transactionPinService;
+
     private AccountServiceImpl accountService;
 
     private User user;
@@ -67,7 +78,9 @@ class AccountServiceImplTest {
                 accountRepository,
                 userRepository,
                 transactionService,
-                accountHelperService
+                accountHelperService,
+                 availableBalanceService,
+                transactionPinService
         );
 
         user = new User();
@@ -207,6 +220,7 @@ class AccountServiceImplTest {
         DepositRequest request = new DepositRequest();
 
         request.setAmount(new BigDecimal("1000.00"));
+        request.setPin("246810");
 
         when(accountHelperService.getUserAccount("SB12345678"))
                 .thenReturn(account);
@@ -262,6 +276,7 @@ class AccountServiceImplTest {
         DepositRequest request = new DepositRequest();
 
         request.setAmount(new BigDecimal("1000.00"));
+        request.setPin("246810");
 
         when(accountHelperService.getUserAccount("SB12345678"))
                 .thenReturn(account);
@@ -281,6 +296,7 @@ class AccountServiceImplTest {
         WithdrawRequest request = new WithdrawRequest();
 
         request.setAmount(new BigDecimal("1000.00"));
+        request.setPin("246810");
 
         when(accountHelperService.getUserAccount("SB12345678"))
                 .thenReturn(account);
@@ -336,6 +352,7 @@ class AccountServiceImplTest {
         WithdrawRequest request = new WithdrawRequest();
 
         request.setAmount(new BigDecimal("1000.00"));
+        request.setPin("246810");
 
         when(accountHelperService.getUserAccount("SB12345678"))
                 .thenReturn(account);
@@ -422,5 +439,50 @@ class AccountServiceImplTest {
 
         verify(userRepository)
                 .findByEmail("george@example.com");
+    }
+
+    @Test
+    void withdraw_shouldNotMoveMoneyWhenTransactionPinIsIncorrect() {
+
+        WithdrawRequest request = new WithdrawRequest();
+
+        request.setAmount(new BigDecimal("1000.00"));
+        request.setPin("000000");
+
+        doThrow(new InvalidTransactionPinException("Incorrect transaction PIN"))
+                .when(transactionPinService)
+                .verifyPin("000000");
+
+        assertThrows(
+                InvalidTransactionPinException.class,
+                () -> accountService.withdraw("SB12345678", request)
+        );
+
+        verify(accountHelperService, never())
+                .getUserAccount("SB12345678");
+
+        verify(accountRepository, never())
+                .save(any(Account.class));
+    }
+
+    @Test
+    void deposit_shouldNotMoveMoneyWhenTransactionPinIsIncorrect() {
+
+        DepositRequest request = new DepositRequest();
+
+        request.setAmount(new BigDecimal("1000.00"));
+        request.setPin("000000");
+
+        doThrow(new InvalidTransactionPinException("Incorrect transaction PIN"))
+                .when(transactionPinService)
+                .verifyPin("000000");
+
+        assertThrows(
+                InvalidTransactionPinException.class,
+                () -> accountService.deposit("SB12345678", request)
+        );
+
+        verify(accountRepository, never())
+                .save(any(Account.class));
     }
 }

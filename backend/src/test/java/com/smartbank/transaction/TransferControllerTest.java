@@ -2,6 +2,7 @@
 package com.smartbank.transaction.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -57,6 +58,7 @@ class TransferControllerTest {
         request.setToAccountNumber("SB100002");
         request.setAmount(new BigDecimal("500.00"));
         request.setDescription("Test transfer");
+        request.setPin("246810");
 
         TransferResponse response = new TransferResponse(
                 "Transfer successful",
@@ -84,6 +86,26 @@ class TransferControllerTest {
                 .value(500.00));
 
         verify(transferService, times(1))
+                .transfer(any(TransferRequest.class));
+    }
+
+    @Test
+    void transfer_withoutTransactionPin_returnsBadRequest()
+            throws Exception {
+
+        TransferRequest request = new TransferRequest();
+        request.setFromAccountNumber("SB100001");
+        request.setToAccountNumber("SB100002");
+        request.setAmount(new BigDecimal("500.00"));
+
+        mockMvc.perform(
+                post("/api/accounts/transfer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+        )
+        .andExpect(status().isBadRequest());
+
+        verify(transferService, never())
                 .transfer(any(TransferRequest.class));
     }
 

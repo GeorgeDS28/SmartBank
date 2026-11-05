@@ -333,6 +333,51 @@ public ResponseEntity<List<TransactionResponse>> getTransactions(
     return ResponseEntity.ok(
             transactionService.getTransactions(accountNumber));
 }
+
+
+
+
+  @Operation(
+            summary = "Close an account",
+            description = "Marks the specified account as CLOSED. The account "
+                    + "must have a zero balance; its transaction history is kept."
+    )
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "Account closed successfully"
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "Account still holds a balance or is already closed"
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "Authentication required"
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "Access denied"
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "Account not found"
+            )
+    })
+  @PostMapping("/{accountNumber}/close")
+public ResponseEntity<AccountResponse> closeAccount(
+
+         @Parameter(
+                    description = "Account number to close",
+                    required = true,
+                    example = "ACC10001"
+            )
+
+        @PathVariable String accountNumber) {
+
+    return ResponseEntity.ok(
+            accountService.closeAccount(accountNumber));
+}
          
 
 

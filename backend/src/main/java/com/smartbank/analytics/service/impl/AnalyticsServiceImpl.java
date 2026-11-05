@@ -38,6 +38,8 @@ import com.smartbank.user.repository.UserRepository;
 import com.smartbank.analytics.service.AnalyticsService;
 
 import com.smartbank.analytics.dto.FinancialSummaryResponse;
+import org.springframework.transaction.annotation.Transactional;
+
 
 import lombok.RequiredArgsConstructor;
 
@@ -55,6 +57,7 @@ public class AnalyticsServiceImpl implements AnalyticsService {
     private final UserRepository userRepository;
 
     @Override
+    @Transactional(readOnly = true)
     public DashboardResponse getDashboard() {
 
      // Get authenticated Spring Security user

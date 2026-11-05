@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 
 
 
@@ -26,6 +27,10 @@ public class TransferRequest {
     private BigDecimal amount;
 
     private String description;
+
+    @NotBlank(message = "Transaction PIN is required")
+    @Pattern(regexp = "^[0-9]{6}$", message = "Transaction PIN must contain exactly 6 digits")
+    private String pin;
 
     public TransferRequest() {
     }
@@ -60,5 +65,13 @@ public class TransferRequest {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getPin() {
+        return pin;
+    }
+
+    public void setPin(String pin) {
+        this.pin = pin;
     }
 }

@@ -5,11 +5,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -18,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.smartbank.auth.dto.LoginRequest;
 import com.smartbank.auth.dto.LoginResponse;
 import com.smartbank.auth.dto.RegisterRequest;
@@ -43,7 +44,7 @@ class AuthControllerTest {
     private JwtService jwtService;
 
     @MockBean
-   private CustomUserDetailsService customUserDetailsService;
+    private CustomUserDetailsService customUserDetailsService;
 
     @Test
     void register_success() throws Exception {
@@ -62,7 +63,10 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request))
         )
         .andExpect(status().isOk())
-        .andExpect(content().string("User registered successfully"));
+        .andExpect(
+                jsonPath("$.message")
+                        .value("User registered successfully")
+        );
 
         verify(authService).register(any(RegisterRequest.class));
     }
@@ -100,8 +104,10 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(request))
         )
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.token")
-                .value("mock-jwt-token"));
+        .andExpect(
+                jsonPath("$.token")
+                        .value("mock-jwt-token")
+        );
 
         verify(authService).login(any(LoginRequest.class));
     }

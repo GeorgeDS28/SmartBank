@@ -185,7 +185,7 @@ class AccountControllerTest {
     void deposit_success() throws Exception {
 
         DepositRequest request =
-                new DepositRequest(new BigDecimal("1000.00"));
+                new DepositRequest(new BigDecimal("1000.00"), "246810");
 
         DepositResponse response = new DepositResponse(
                 "SB1234567890",
@@ -242,7 +242,7 @@ class AccountControllerTest {
     void withdraw_success() throws Exception {
 
         WithdrawRequest request =
-                new WithdrawRequest(new BigDecimal("500.00"));
+                new WithdrawRequest(new BigDecimal("500.00"), "246810");
 
         WithdrawResponse response = new WithdrawResponse(
                 "Withdrawal successful",

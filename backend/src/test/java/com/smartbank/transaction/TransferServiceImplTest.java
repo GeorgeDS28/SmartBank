@@ -22,10 +22,12 @@ import com.smartbank.account.entity.AccountStatus;
 import com.smartbank.account.entity.AccountType;
 import com.smartbank.account.repository.AccountRepository;
 import com.smartbank.account.service.AccountHelperService;
+import com.smartbank.account.service.AvailableBalanceService;
 
 import com.smartbank.exception.AccountNotFoundException;
 import com.smartbank.exception.InactiveAccountException;
 import com.smartbank.exception.InsufficientBalanceException;
+import com.smartbank.exception.InvalidTransactionPinException;
 
 import com.smartbank.transaction.dto.TransferRequest;
 import com.smartbank.transaction.dto.TransferResponse;
@@ -33,6 +35,7 @@ import com.smartbank.transaction.entity.Transaction;
 import com.smartbank.transaction.enums.TransactionType;
 import com.smartbank.transaction.repository.TransactionRepository;
 
+import com.smartbank.user.entity.User;
 
 @ExtendWith(MockitoExtension.class)
 class TransferServiceImplTest {
@@ -46,32 +49,53 @@ class TransferServiceImplTest {
     @Mock
     private AccountHelperService accountHelperService;
 
+    @Mock
+    private AvailableBalanceService availableBalanceService;
+
+    @Mock
+    private com.smartbank.transactionpin.service.TransactionPinService transactionPinService;
+
     @InjectMocks
     private TransferServiceImpl transferService;
 
     private Account sender;
     private Account receiver;
 
+    private User senderUser;
+    private User receiverUser;
+
     @BeforeEach
     void setUp() {
 
+        // Create users associated with the accounts.
+        senderUser = new User();
+        senderUser.setId(1L);
+        senderUser.setEmail("sender@gmail.com");
+
+        receiverUser = new User();
+        receiverUser.setId(2L);
+        receiverUser.setEmail("receiver@gmail.com");
+
+        // Sender account.
         sender = Account.builder()
                 .id(1L)
                 .accountNumber("SB11111111")
                 .accountType(AccountType.SAVINGS)
                 .balance(new BigDecimal("10000.00"))
                 .status(AccountStatus.ACTIVE)
+                .user(senderUser)
                 .build();
 
+        // Receiver account.
         receiver = Account.builder()
                 .id(2L)
                 .accountNumber("SB22222222")
                 .accountType(AccountType.SAVINGS)
                 .balance(new BigDecimal("5000.00"))
                 .status(AccountStatus.ACTIVE)
+                .user(receiverUser)
                 .build();
     }
-
 
     @Test
     void transfer_success() {
@@ -83,66 +107,31 @@ class TransferServiceImplTest {
         request.setAmount(new BigDecimal("3000.00"));
         request.setDescription("Rent payment");
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         TransferResponse response =
                 transferService.transfer(request);
 
-
         assertNotNull(response);
 
-        assertEquals(
-                "Transfer successful",
-                response.getMessage()
-        );
+        assertEquals("Transfer successful", response.getMessage());
+        assertEquals("SB11111111", response.getFromAccountNumber());
+        assertEquals("SB22222222", response.getToAccountNumber());
+        assertEquals(new BigDecimal("3000.00"), response.getAmount());
 
-        assertEquals(
-                "SB11111111",
-                response.getFromAccountNumber()
-        );
+        assertEquals(new BigDecimal("7000.00"), sender.getBalance());
+        assertEquals(new BigDecimal("8000.00"), receiver.getBalance());
 
-        assertEquals(
-                "SB22222222",
-                response.getToAccountNumber()
-        );
+        verify(accountRepository, times(1)).save(sender);
+        verify(accountRepository, times(1)).save(receiver);
 
-        assertEquals(
-                new BigDecimal("3000.00"),
-                response.getAmount()
-        );
-
-
-        // Verify balances
-        assertEquals(
-                new BigDecimal("7000.00"),
-                sender.getBalance()
-        );
-
-        assertEquals(
-                new BigDecimal("8000.00"),
-                receiver.getBalance()
-        );
-
-
-        // Verify account saves
-        verify(accountRepository, times(1))
-                .save(sender);
-
-        verify(accountRepository, times(1))
-                .save(receiver);
-
-
-        // Verify two transaction records were created
         verify(transactionRepository, times(2))
                 .save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_createsCorrectTransactionRecords() {
@@ -154,16 +143,13 @@ class TransferServiceImplTest {
         request.setAmount(new BigDecimal("2000.00"));
         request.setDescription("Shopping");
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         transferService.transfer(request);
-
 
         ArgumentCaptor<Transaction> transactionCaptor =
                 ArgumentCaptor.forClass(Transaction.class);
@@ -171,15 +157,12 @@ class TransferServiceImplTest {
         verify(transactionRepository, times(2))
                 .save(transactionCaptor.capture());
 
-
         Transaction senderTransaction =
                 transactionCaptor.getAllValues().get(0);
 
         Transaction receiverTransaction =
                 transactionCaptor.getAllValues().get(1);
 
-
-        // Sender transaction
         assertEquals(
                 TransactionType.TRANSFER_OUT,
                 senderTransaction.getTransactionType()
@@ -195,13 +178,8 @@ class TransferServiceImplTest {
                 senderTransaction.getDescription()
         );
 
-        assertEquals(
-                sender,
-                senderTransaction.getAccount()
-        );
+        assertEquals(sender, senderTransaction.getAccount());
 
-
-        // Receiver transaction
         assertEquals(
                 TransactionType.TRANSFER_IN,
                 receiverTransaction.getTransactionType()
@@ -217,22 +195,11 @@ class TransferServiceImplTest {
                 receiverTransaction.getDescription()
         );
 
-        assertEquals(
-                receiver,
-                receiverTransaction.getAccount()
-        );
+        assertEquals(receiver, receiverTransaction.getAccount());
 
-
-        // Transaction references should be generated
-        assertNotNull(
-                senderTransaction.getTransactionReference()
-        );
-
-        assertNotNull(
-                receiverTransaction.getTransactionReference()
-        );
+        assertNotNull(senderTransaction.getTransactionReference());
+        assertNotNull(receiverTransaction.getTransactionReference());
     }
-
 
     @Test
     void transfer_receiverAccountNotFound_throwsException() {
@@ -243,27 +210,20 @@ class TransferServiceImplTest {
         request.setToAccountNumber("SB99999999");
         request.setAmount(new BigDecimal("1000.00"));
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB99999999"))
                 .thenReturn(Optional.empty());
 
-
         assertThrows(
                 AccountNotFoundException.class,
                 () -> transferService.transfer(request)
         );
 
-
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verify(transactionRepository, never())
-                .save(any(Transaction.class));
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_selfTransfer_throwsException() {
@@ -274,27 +234,20 @@ class TransferServiceImplTest {
         request.setToAccountNumber("SB11111111");
         request.setAmount(new BigDecimal("1000.00"));
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB11111111"))
                 .thenReturn(Optional.of(sender));
 
-
         assertThrows(
                 IllegalArgumentException.class,
                 () -> transferService.transfer(request)
         );
 
-
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verify(transactionRepository, never())
-                .save(any(Transaction.class));
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_senderInactive_throwsException() {
@@ -307,27 +260,20 @@ class TransferServiceImplTest {
         request.setToAccountNumber("SB22222222");
         request.setAmount(new BigDecimal("1000.00"));
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         assertThrows(
                 InactiveAccountException.class,
                 () -> transferService.transfer(request)
         );
 
-
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verify(transactionRepository, never())
-                .save(any(Transaction.class));
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_receiverInactive_throwsException() {
@@ -340,27 +286,20 @@ class TransferServiceImplTest {
         request.setToAccountNumber("SB22222222");
         request.setAmount(new BigDecimal("1000.00"));
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         assertThrows(
                 InactiveAccountException.class,
                 () -> transferService.transfer(request)
         );
 
-
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verify(transactionRepository, never())
-                .save(any(Transaction.class));
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_zeroAmount_throwsException() {
@@ -371,27 +310,20 @@ class TransferServiceImplTest {
         request.setToAccountNumber("SB22222222");
         request.setAmount(BigDecimal.ZERO);
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         assertThrows(
                 IllegalArgumentException.class,
                 () -> transferService.transfer(request)
         );
 
-
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verify(transactionRepository, never())
-                .save(any(Transaction.class));
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_negativeAmount_throwsException() {
@@ -402,27 +334,20 @@ class TransferServiceImplTest {
         request.setToAccountNumber("SB22222222");
         request.setAmount(new BigDecimal("-500.00"));
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         assertThrows(
                 IllegalArgumentException.class,
                 () -> transferService.transfer(request)
         );
 
-
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verify(transactionRepository, never())
-                .save(any(Transaction.class));
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_insufficientBalance_throwsException() {
@@ -433,41 +358,23 @@ class TransferServiceImplTest {
         request.setToAccountNumber("SB22222222");
         request.setAmount(new BigDecimal("15000.00"));
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         assertThrows(
                 InsufficientBalanceException.class,
                 () -> transferService.transfer(request)
         );
 
+        assertEquals(new BigDecimal("10000.00"), sender.getBalance());
+        assertEquals(new BigDecimal("5000.00"), receiver.getBalance());
 
-        // Sender balance must remain unchanged
-        assertEquals(
-                new BigDecimal("10000.00"),
-                sender.getBalance()
-        );
-
-
-        // Receiver balance must remain unchanged
-        assertEquals(
-                new BigDecimal("5000.00"),
-                receiver.getBalance()
-        );
-
-
-        verify(accountRepository, never())
-                .save(any(Account.class));
-
-        verify(transactionRepository, never())
-                .save(any(Transaction.class));
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never()).save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_successWithExactBalance() {
@@ -481,41 +388,30 @@ class TransferServiceImplTest {
         request.setAmount(new BigDecimal("5000.00"));
         request.setDescription("Full balance transfer");
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         TransferResponse response =
                 transferService.transfer(request);
 
-
         assertNotNull(response);
 
-        assertEquals(
-                0,
-                sender.getBalance().compareTo(BigDecimal.ZERO)
-        );
+        assertEquals(0, sender.getBalance().compareTo(BigDecimal.ZERO));
 
         assertEquals(
                 new BigDecimal("10000.00"),
                 receiver.getBalance()
         );
 
-
-        verify(accountRepository, times(1))
-                .save(sender);
-
-        verify(accountRepository, times(1))
-                .save(receiver);
+        verify(accountRepository, times(1)).save(sender);
+        verify(accountRepository, times(1)).save(receiver);
 
         verify(transactionRepository, times(2))
                 .save(any(Transaction.class));
     }
-
 
     @Test
     void transfer_descriptionIsStoredInTransactions() {
@@ -527,23 +423,19 @@ class TransferServiceImplTest {
         request.setAmount(new BigDecimal("1000.00"));
         request.setDescription("Monthly rent");
 
-
         when(accountHelperService.getUserAccount("SB11111111"))
                 .thenReturn(sender);
 
         when(accountRepository.findByAccountNumber("SB22222222"))
                 .thenReturn(Optional.of(receiver));
 
-
         transferService.transfer(request);
-
 
         ArgumentCaptor<Transaction> captor =
                 ArgumentCaptor.forClass(Transaction.class);
 
         verify(transactionRepository, times(2))
                 .save(captor.capture());
-
 
         for (Transaction transaction : captor.getAllValues()) {
 
@@ -558,5 +450,31 @@ class TransferServiceImplTest {
             );
         }
     }
-}
 
+    @Test
+    void transfer_shouldNotMoveMoneyWhenTransactionPinIsIncorrect() {
+
+        TransferRequest request = new TransferRequest();
+
+        request.setFromAccountNumber("SB11111111");
+        request.setToAccountNumber("SB22222222");
+        request.setAmount(new BigDecimal("1000.00"));
+        request.setPin("000000");
+
+        doThrow(new InvalidTransactionPinException("Incorrect transaction PIN"))
+                .when(transactionPinService)
+                .verifyPin("000000");
+
+        assertThrows(
+                InvalidTransactionPinException.class,
+                () -> transferService.transfer(request)
+        );
+
+        verify(accountHelperService, never())
+                .getUserAccount("SB11111111");
+
+        verify(accountRepository, never()).save(any(Account.class));
+        verify(transactionRepository, never())
+                .save(any(Transaction.class));
+    }
+}

@@ -32,20 +32,26 @@ import com.smartbank.goal.service.GoalHelperService;
 import com.smartbank.user.entity.User;
 import com.smartbank.user.repository.UserRepository;
 
+import com.smartbank.account.service.AvailableBalanceService;
+
 @ExtendWith(MockitoExtension.class)
 class GoalServiceImplTest {
 
-    @Mock
-    private GoalRepository goalRepository;
+  @Mock
+private GoalRepository goalRepository;
 
-    @Mock
-    private UserRepository userRepository;
+@Mock
+private UserRepository userRepository;
 
-    @Mock
-    private GoalHelperService goalHelperService;
+@Mock
+private GoalHelperService goalHelperService;
 
-    @InjectMocks
-    private GoalServiceImpl goalService;
+@Mock
+private AvailableBalanceService availableBalanceService;
+
+@InjectMocks
+private GoalServiceImpl goalService;
+
 
     private User user;
     private Goal goal;
@@ -372,6 +378,8 @@ class GoalServiceImplTest {
         );
 
         verify(goalRepository).save(goal);
+        verify(availableBalanceService)
+        .assertSpendable(new BigDecimal("30000.00"));
     }
 
     @Test
@@ -405,6 +413,9 @@ class GoalServiceImplTest {
         );
 
         verify(goalRepository).save(goal);
+        verify(availableBalanceService)
+        .assertSpendable(new BigDecimal("80000.00"));
+    
     }
 
     @Test
@@ -439,6 +450,8 @@ class GoalServiceImplTest {
         );
 
         verify(goalRepository).save(goal);
+         verify(availableBalanceService)
+        .assertSpendable(new BigDecimal("80000.00"));
     }
 
     @Test

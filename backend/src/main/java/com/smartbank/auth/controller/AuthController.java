@@ -29,6 +29,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 
+import java.util.Map;
+
+
+
+
 import jakarta.validation.Valid;
 
 @RestController
@@ -78,13 +83,15 @@ public class AuthController {
 
 
 @PostMapping("/register")
-    public ResponseEntity<String> register(
+    public ResponseEntity<Map<String ,String>> register(
             @Valid @RequestBody RegisterRequest request) {
 
         
         authService.register(request);
 
-        return ResponseEntity.ok("User registered successfully");
+        return ResponseEntity.ok(
+                  Map.of("message", "User registered successfully")
+        );
     }
 
 

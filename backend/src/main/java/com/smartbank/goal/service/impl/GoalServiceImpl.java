@@ -9,6 +9,7 @@ import java.util.List;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
+import com.smartbank.account.service.AvailableBalanceService;
 import com.smartbank.goal.dto.CreateGoalRequest;
 import com.smartbank.goal.dto.GoalResponse;
 import com.smartbank.goal.dto.UpdateGoalRequest;
@@ -32,6 +33,7 @@ public class GoalServiceImpl implements GoalService {
     private final GoalRepository goalRepository;
     private final UserRepository userRepository;
     private final GoalHelperService goalHelperService;
+    private final AvailableBalanceService availableBalanceService;
 
     @Override
 public GoalResponse createGoal(CreateGoalRequest request) {
@@ -172,16 +174,16 @@ public GoalResponse contributeToGoal(Long goalId, ContributeGoalRequest request)
         goal.setStatus(GoalStatus.COMPLETED);
     }
 
+    // Reserving money in a goal has to come out of what is actually free;
+    // otherwise the same rupee could back two claims.
+    availableBalanceService.assertSpendable(
+            updatedAmount.subtract(goal.getCurrentAmount()));
+
     goal.setCurrentAmount(updatedAmount);
 
     Goal updatedGoal = goalRepository.save(goal);
 
     return mapToResponse(updatedGoal);
 }
-
-
-
-
-
 
 }
