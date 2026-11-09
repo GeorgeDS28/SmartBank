@@ -46,8 +46,19 @@ public class SecurityConfig {
                         // Allow browser CORS preflight requests
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                        // Authentication endpoints
-                        .requestMatchers("/api/auth/**").permitAll()
+                        // Listed one by one rather than as /api/auth/**, so a
+                        // future auth route cannot become public by accident.
+                        // /api/auth/change-password stays out and falls through
+                        // to authenticated().
+                        .requestMatchers(
+                                "/api/auth/register",
+                                "/api/auth/login",
+
+                                // Recovery has to work while the user is
+                                // locked out of their account.
+                                "/api/auth/forgot-password",
+                                "/api/auth/reset-password"
+                        ).permitAll()
 
                         // Error endpoint
                         .requestMatchers("/error").permitAll()

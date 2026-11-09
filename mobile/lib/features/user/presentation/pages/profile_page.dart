@@ -103,6 +103,15 @@ class ProfilePage extends ConsumerWidget {
                     onTap: () => context.push('/transaction-pin'),
                   ),
                   ListTile(
+                    leading: const Icon(Icons.password_outlined),
+                    title: const Text('Change password'),
+                    subtitle: const Text(
+                      'Re-confirm your current password to replace it',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push('/change-password'),
+                  ),
+                  ListTile(
                     leading: const Icon(Icons.settings_outlined),
                     title: const Text('Settings'),
                     subtitle: const Text('Balance privacy and app preferences'),

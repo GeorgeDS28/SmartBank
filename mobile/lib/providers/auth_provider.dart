@@ -63,6 +63,33 @@ class AuthNotifier extends Notifier<AuthState> {
     state = AuthState.authenticated(email: emailFromToken(response.token));
   }
 
+  /// The backend keeps the issued JWT valid after a password change, so the
+  /// session is left alone and only the stored hash is replaced.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) => _authRepository.changePassword(
+    currentPassword: currentPassword,
+    newPassword: newPassword,
+    confirmPassword: confirmPassword,
+  );
+
+  Future<String> forgotPassword({required String email}) =>
+      _authRepository.forgotPassword(email: email);
+
+  Future<String> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+    required String confirmPassword,
+  }) => _authRepository.resetPassword(
+    email: email,
+    code: code,
+    newPassword: newPassword,
+    confirmPassword: confirmPassword,
+  );
+
   Future<void> logout() async {
     await _tokenStorage.deleteToken();
     _startSession();

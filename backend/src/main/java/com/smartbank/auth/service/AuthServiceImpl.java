@@ -4,9 +4,14 @@
 AuthServiceImpl.java
 */
 package com.smartbank.auth.service;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 import com.smartbank.user.enums.Role;
+import com.smartbank.auth.dto.ChangePasswordRequest;
 import com.smartbank.auth.dto.LoginRequest;
 import com.smartbank.auth.dto.LoginResponse;
 import com.smartbank.auth.dto.RegisterRequest;
@@ -103,7 +108,52 @@ public class AuthServiceImpl implements AuthService
 
        }
 
+    @Override
+    @Transactional
+    public void changePassword(ChangePasswordRequest request) {
 
+        User user = getAuthenticatedUser();
 
+        // The session alone is not proof enough to replace the credential that
+        // created it, so the current password is checked against its hash.
+        if (!passwordEncoder.matches(
+                request.getCurrentPassword(),
+                user.getPassword())) {
+            log.warn("Failed password change attempt");
+            throw new InvalidCredentialsException("Current password does not match");
+        }
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new IllegalArgumentException(
+                    "New password and confirmation do not match");
+        }
+
+        if (passwordEncoder.matches(
+                request.getNewPassword(),
+                user.getPassword())) {
+            throw new IllegalArgumentException(
+                    "New password must be different from the current password");
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+
+        userRepository.save(user);
+        log.info("Password changed successfully");
+    }
+
+    private User getAuthenticatedUser() {
+
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication()
+                .getName();
+
+        return userRepository.findByEmail(email)
+                .orElseThrow(() ->
+                        new ResponseStatusException(
+                                HttpStatus.NOT_FOUND,
+                                "Authenticated user not found"
+                        )
+                );
+    }
 
 }

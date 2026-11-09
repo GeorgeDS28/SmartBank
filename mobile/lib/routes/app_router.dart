@@ -5,8 +5,11 @@ import 'package:go_router/go_router.dart';
 import '../features/account/presentation/pages/account_details_page.dart';
 import '../features/account/presentation/pages/accounts_page.dart';
 import '../features/analytics/presentation/pages/analytics_page.dart';
+import '../features/auth/presentation/pages/change_password_page.dart';
+import '../features/auth/presentation/pages/forgot_password_page.dart';
 import '../features/auth/presentation/pages/login_page.dart';
 import '../features/auth/presentation/pages/register_page.dart';
+import '../features/auth/presentation/pages/reset_password_page.dart';
 import '../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../features/goal/presentation/pages/goal_details_page.dart';
 import '../features/goal/presentation/pages/goals_page.dart';
@@ -35,7 +38,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       final isAuthenticated = status == AuthStatus.authenticated;
-      final isAuthPage = location == '/login' || location == '/register';
+
+      // Recovery belongs here: a locked-out user has no session, and
+      // /change-password does not, because it needs one.
+      final isAuthPage = const [
+        '/login',
+        '/register',
+        '/forgot-password',
+        '/reset-password',
+      ].contains(location);
 
       if (!isAuthenticated && !isAuthPage) {
         return '/login';
@@ -54,8 +65,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const RegisterPage(),
       ),
       GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordPage(),
+      ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => ResetPasswordPage(
+          email: state.extra is String ? state.extra! as String : '',
+        ),
+      ),
+      GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        path: '/change-password',
+        builder: (context, state) => const ChangePasswordPage(),
       ),
       GoRoute(
         path: '/transaction-pin',

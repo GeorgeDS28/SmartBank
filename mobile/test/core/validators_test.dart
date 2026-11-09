@@ -115,4 +115,28 @@ void main() {
       );
     });
   });
+
+  group('Validators.passwordConfirmation', () {
+    test('accepts a matching pair that clears the registration length', () {
+      expect(
+        Validators.passwordConfirmation('NewPass!23', 'NewPass!23'),
+        isNull,
+      );
+    });
+
+    test('reports a mismatch only after the entry is long enough', () {
+      expect(
+        Validators.passwordConfirmation('abc', 'NewPass!23'),
+        contains('at least 8 characters'),
+      );
+      expect(
+        Validators.passwordConfirmation('NewPass!24', 'NewPass!23'),
+        'Passwords do not match',
+      );
+      expect(
+        Validators.passwordConfirmation('', 'NewPass!23'),
+        contains('required'),
+      );
+    });
+  });
 }

@@ -38,6 +38,19 @@ class Validators {
     return null;
   }
 
+  /// The backend compares the two password entries itself, so a typo is caught
+  /// here rather than after the request goes out.
+  static String? passwordConfirmation(
+    String? value,
+    String? original, {
+    String field = 'Confirm password',
+  }) {
+    final error = newPassword(value);
+    if (error != null) return error;
+    if (value!.trim() != original?.trim()) return 'Passwords do not match';
+    return null;
+  }
+
   static String? amount(String? value, {String field = 'Amount'}) {
     final error = required(value, field: field);
     if (error != null) return error;

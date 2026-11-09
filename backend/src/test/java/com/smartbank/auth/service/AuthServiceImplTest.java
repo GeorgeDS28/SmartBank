@@ -5,8 +5,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import java.util.List;
 import java.util.Optional;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -14,8 +16,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import com.smartbank.auth.dto.ChangePasswordRequest;
 import com.smartbank.auth.dto.LoginRequest;
 import com.smartbank.auth.dto.LoginResponse;
 import com.smartbank.auth.dto.RegisterRequest;
@@ -69,6 +74,13 @@ class AuthServiceImplTest {
         user.setPassword("encodedPassword");
         user.setPhone("9876543210");
         user.setRole(Role.ROLE_USER);
+    }
+
+    // SecurityContextHolder is thread-local; a leaked authentication would be
+    // visible to the next test running in this JVM.
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -193,6 +205,130 @@ class AuthServiceImplTest {
         // JWT should not be generated
         verify(jwtService, never())
                 .generateToken(anyString());
+    }
+
+    @Test
+    void changePassword_success_storesTheNewHashOnly() {
+
+        authenticate();
+
+        when(userRepository.findByEmail("george@test.com"))
+                .thenReturn(Optional.of(user));
+
+        when(passwordEncoder.matches(
+                "password123",
+                "encodedPassword"
+        )).thenReturn(true);
+
+        // The new password is not the old one
+        when(passwordEncoder.matches(
+                "brandNewPassword9",
+                "encodedPassword"
+        )).thenReturn(false);
+
+        when(passwordEncoder.encode("brandNewPassword9"))
+                .thenReturn("newEncodedPassword");
+
+        authService.changePassword(changePasswordRequest(
+                "password123", "brandNewPassword9", "brandNewPassword9"));
+
+        ArgumentCaptor<User> userCaptor =
+                ArgumentCaptor.forClass(User.class);
+
+        verify(userRepository).save(userCaptor.capture());
+
+        assertEquals(
+                "newEncodedPassword",
+                userCaptor.getValue().getPassword()
+        );
+    }
+
+    @Test
+    void changePassword_wrongCurrentPassword_storesNothing() {
+
+        authenticate();
+
+        when(userRepository.findByEmail("george@test.com"))
+                .thenReturn(Optional.of(user));
+
+        when(passwordEncoder.matches(
+                "wrongCurrent",
+                "encodedPassword"
+        )).thenReturn(false);
+
+        assertThrows(
+                InvalidCredentialsException.class,
+                () -> authService.changePassword(changePasswordRequest(
+                        "wrongCurrent", "brandNewPassword9", "brandNewPassword9"))
+        );
+
+        verify(userRepository, never()).save(any(User.class));
+
+        // The rejected input is never turned into a hash
+        verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
+    void changePassword_mismatchedConfirmation_isRejected() {
+
+        authenticate();
+
+        when(userRepository.findByEmail("george@test.com"))
+                .thenReturn(Optional.of(user));
+
+        when(passwordEncoder.matches(
+                "password123",
+                "encodedPassword"
+        )).thenReturn(true);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> authService.changePassword(changePasswordRequest(
+                        "password123", "brandNewPassword9", "otherPassword9"))
+        );
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void changePassword_toTheSamePassword_isRejected() {
+
+        authenticate();
+
+        when(userRepository.findByEmail("george@test.com"))
+                .thenReturn(Optional.of(user));
+
+        when(passwordEncoder.matches(
+                "password123",
+                "encodedPassword"
+        )).thenReturn(true);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> authService.changePassword(changePasswordRequest(
+                        "password123", "password123", "password123"))
+        );
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    private void authenticate() {
+
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(
+                        "george@test.com", null, List.of()));
+    }
+
+    private ChangePasswordRequest changePasswordRequest(
+            String current, String fresh, String confirm) {
+
+        ChangePasswordRequest request = new ChangePasswordRequest();
+
+        request.setCurrentPassword(current);
+        request.setNewPassword(fresh);
+        request.setConfirmPassword(confirm);
+
+        return request;
     }
 }
 

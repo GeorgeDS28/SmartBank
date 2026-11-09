@@ -38,6 +38,47 @@ void main() {
 
     expect(router.routerDelegate.currentConfiguration.uri.path, '/login');
     expect(find.text('Welcome Back'), findsOneWidget);
+
+    // The screen lives under features/auth but changes a live session's
+    // credential, so it must not be reachable without a token.
+    router.go('/change-password');
+    await tester.pumpAndSettle();
+
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/login');
+  });
+
+  testWidgets('password recovery screens stay open without a session', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        apiClientProvider.overrideWithValue(buildFakeClient({})),
+        tokenStorageProvider.overrideWithValue(FakeTokenStorage(token: null)),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          routerConfig: container.read(appRouterProvider),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final router = container.read(appRouterProvider);
+
+    // A locked-out user has nothing to sign in with, so both screens have to
+    // load rather than being bounced back to login.
+    router.go('/forgot-password');
+    await tester.pumpAndSettle();
+    expect(find.text('Forgot password'), findsOneWidget);
+
+    router.go('/reset-password');
+    await tester.pumpAndSettle();
+    expect(find.text('Set a new password'), findsOneWidget);
   });
 
   testWidgets('auth pages redirect an authenticated user to the dashboard', (

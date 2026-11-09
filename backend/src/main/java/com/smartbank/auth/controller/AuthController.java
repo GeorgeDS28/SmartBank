@@ -12,10 +12,12 @@ package com.smartbank.auth.controller;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.smartbank.auth.dto.ChangePasswordRequest;
 import com.smartbank.auth.dto.LoginRequest;
 import com.smartbank.auth.dto.LoginResponse;
 import com.smartbank.auth.dto.RegisterRequest;
@@ -124,4 +126,33 @@ public class AuthController {
 
     return ResponseEntity.ok(authService.login(request));
       }
+
+    @Operation(
+        summary = "Change password",
+        description = "Replaces the password of the authenticated user after verifying the current one."
+    )
+    @ApiResponses({
+        @ApiResponse(
+                responseCode = "200",
+                description = "Password changed successfully"
+        ),
+        @ApiResponse(
+                responseCode = "400",
+                description = "New password and confirmation do not match"
+        ),
+        @ApiResponse(
+                responseCode = "401",
+                description = "Current password does not match"
+        )
+    })
+    @PutMapping("/change-password")
+    public ResponseEntity<Map<String, String>> changePassword(
+            @Valid @RequestBody ChangePasswordRequest request) {
+
+        authService.changePassword(request);
+
+        return ResponseEntity.ok(
+                Map.of("message", "Password changed successfully")
+        );
+    }
 }

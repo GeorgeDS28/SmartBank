@@ -441,6 +441,132 @@ void main() {
         ),
       );
     });
+
+    test(
+      'changePassword posts the three names ChangePasswordRequest has',
+      () async {
+        final client = buildFakeClient({
+          'PUT /api/auth/change-password': const StubbedResponse(200, {
+            'message': 'Password changed successfully',
+          }),
+        });
+
+        await AuthRepositoryImpl(client).changePassword(
+          currentPassword: 'OldPass!23',
+          newPassword: 'NewPass!23',
+          confirmPassword: 'NewPass!23',
+        );
+
+        final request =
+            (client.dio.httpClientAdapter as FakeApiAdapter).lastRequest!;
+        expect(request.key, 'PUT /api/auth/change-password');
+        expect(request.body, {
+          'currentPassword': 'OldPass!23',
+          'newPassword': 'NewPass!23',
+          'confirmPassword': 'NewPass!23',
+        });
+      },
+    );
+
+    test('a refused password change surfaces the backend reason', () async {
+      final repository = AuthRepositoryImpl(
+        buildFakeClient({
+          'PUT /api/auth/change-password': const StubbedResponse(401, {
+            'message': 'Current password does not match',
+          }),
+        }),
+      );
+
+      await expectLater(
+        repository.changePassword(
+          currentPassword: 'wrong',
+          newPassword: 'NewPass!23',
+          confirmPassword: 'NewPass!23',
+        ),
+        throwsA(
+          isA<ApiException>()
+              .having(
+                (e) => e.message,
+                'message',
+                'Current password does not match',
+              )
+              .having((e) => e.statusCode, 'statusCode', 401),
+        ),
+      );
+    });
+
+    test('forgotPassword sends only the email and repeats the reply', () async {
+      final client = buildFakeClient({
+        'POST /api/auth/forgot-password': const StubbedResponse.ok({
+          'message': 'If that email belongs to an account, a reset code has been sent.',
+        }),
+      });
+
+      final message = await AuthRepositoryImpl(client)
+          .forgotPassword(email: 'john@example.com');
+
+      final request =
+          (client.dio.httpClientAdapter as FakeApiAdapter).lastRequest!;
+      expect(request.key, 'POST /api/auth/forgot-password');
+      expect(request.body, {'email': 'john@example.com'});
+      expect(
+        message,
+        'If that email belongs to an account, a reset code has been sent.',
+      );
+    });
+
+    test('a server-side mail failure keeps the app-wide 5xx message', () async {
+      final repository = AuthRepositoryImpl(
+        buildFakeClient({
+          'POST /api/auth/forgot-password': const StubbedResponse(503, {
+            'message': 'Email delivery is not configured on this server',
+          }),
+        }),
+      );
+
+      await expectLater(
+        repository.forgotPassword(email: 'john@example.com'),
+        throwsA(
+          isA<ApiException>()
+              .having(
+                (e) => e.message,
+                'message',
+                'SmartBank could not complete the request. Please try again.',
+              )
+              .having((e) => e.statusCode, 'statusCode', 503),
+        ),
+      );
+    });
+
+    test(
+      'resetPassword posts the four names ResetPasswordRequest has',
+      () async {
+        final client = buildFakeClient({
+          'POST /api/auth/reset-password': const StubbedResponse.ok({
+            'message': 'Password reset successfully',
+          }),
+        });
+
+        final message = await AuthRepositoryImpl(client).resetPassword(
+          email: 'john@example.com',
+          code: '246813',
+          newPassword: 'Recovered!23',
+          confirmPassword: 'Recovered!23',
+        );
+
+        final request =
+            (client.dio.httpClientAdapter as FakeApiAdapter).lastRequest!;
+        expect(request.key, 'POST /api/auth/reset-password');
+        expect(request.body.keys, [
+          'email',
+          'code',
+          'newPassword',
+          'confirmPassword',
+        ]);
+        expect(request.body['code'], '246813');
+        expect(message, 'Password reset successfully');
+      },
+    );
   });
 
   group('TransactionPinRepositoryImpl', () {

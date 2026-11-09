@@ -6,6 +6,9 @@ import 'package:smartbank/core/network/providers.dart';
 import 'package:smartbank/features/account/presentation/pages/account_details_page.dart';
 import 'package:smartbank/features/account/presentation/pages/accounts_page.dart';
 import 'package:smartbank/features/account/presentation/providers/accounts_provider.dart';
+import 'package:smartbank/features/auth/presentation/pages/change_password_page.dart';
+import 'package:smartbank/features/auth/presentation/pages/forgot_password_page.dart';
+import 'package:smartbank/features/auth/presentation/pages/reset_password_page.dart';
 import 'package:smartbank/features/goal/presentation/pages/goals_page.dart';
 import 'package:smartbank/features/goal/presentation/providers/goals_provider.dart';
 import 'package:smartbank/features/user/presentation/pages/profile_page.dart';
@@ -33,6 +36,60 @@ Widget wrap(
     ],
     child: MaterialApp(home: page),
   );
+}
+
+/// Password recovery spans two screens that push each other, so the tests run
+/// against a router that carries the real '/forgot-password' and
+/// '/reset-password' locations.
+Future<FakeApiAdapter> pumpRecoveryRoute(
+  WidgetTester tester,
+  Map<String, StubbedResponse> stubs,
+  String start,
+) async {
+  final client = buildFakeClient(stubs);
+  final container = ProviderContainer(
+    overrides: [
+      apiClientProvider.overrideWithValue(client),
+      tokenStorageProvider.overrideWithValue(FakeTokenStorage(token: null)),
+    ],
+  );
+  addTearDown(container.dispose);
+
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(
+        routerConfig: GoRouter(
+          initialLocation: start,
+          routes: [
+            GoRoute(
+              path: '/',
+              builder: (context, state) => const SizedBox.shrink(),
+              routes: [
+                GoRoute(
+                  path: 'login',
+                  builder: (context, state) => const SizedBox.shrink(),
+                ),
+                GoRoute(
+                  path: 'forgot-password',
+                  builder: (context, state) => const ForgotPasswordPage(),
+                ),
+                GoRoute(
+                  path: 'reset-password',
+                  builder: (context, state) => ResetPasswordPage(
+                    email: state.extra is String ? state.extra! as String : '',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  return client.dio.httpClientAdapter as FakeApiAdapter;
 }
 
 void main() {
@@ -1169,6 +1226,358 @@ void main() {
         log.log.where((entry) => entry.key == 'PUT /api/transaction-pin/reset'),
         isEmpty,
       );
+    });
+  });
+
+  group('ForgotPasswordPage', () {
+    Future<FakeApiAdapter> pumpRecoveryPages(
+      WidgetTester tester,
+      Map<String, StubbedResponse> stubs,
+    ) => pumpRecoveryRoute(tester, stubs, '/forgot-password');
+
+    const requested = StubbedResponse.ok({
+      'message':
+          'If that email belongs to an account, a reset code has been sent.',
+    });
+
+    testWidgets('posts only the email and carries it to the code screen', (
+      tester,
+    ) async {
+      final log = await pumpRecoveryPages(tester, {
+        'POST /api/auth/forgot-password': requested,
+      });
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Registered email'),
+        'george@example.com',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Send reset code'));
+      await tester.pumpAndSettle();
+
+      expect(
+        log.log
+            .where((entry) => entry.key == 'POST /api/auth/forgot-password')
+            .single
+            .body,
+        {'email': 'george@example.com'},
+      );
+
+      expect(find.text('Set a new password'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.widgetWithText(TextFormField, 'Registered email'),
+            )
+            .controller!
+            .text,
+        'george@example.com',
+        reason: 'the address the code was sent to carries over',
+      );
+    });
+
+    testWidgets('stays put when the server cannot deliver the code', (
+      tester,
+    ) async {
+      await pumpRecoveryPages(tester, {
+        'POST /api/auth/forgot-password': const StubbedResponse(503, {
+          'message': 'Email delivery is not configured on this server',
+        }),
+      });
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Registered email'),
+        'george@example.com',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Send reset code'));
+      await tester.pumpAndSettle();
+
+      // 5xx bodies are never repeated to the user, so the app-wide fault
+      // message appears instead - and, importantly, no success is claimed.
+      expect(
+        find.text(
+          'SmartBank could not complete the request. Please try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Forgot password'), findsOneWidget);
+      expect(find.text('Set a new password'), findsNothing);
+    });
+
+    testWidgets('rejects a malformed address without a request', (
+      tester,
+    ) async {
+      final log = await pumpRecoveryPages(tester, {
+        'POST /api/auth/forgot-password': requested,
+      });
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Registered email'),
+        'not-an-email',
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Send reset code'));
+      await tester.pumpAndSettle();
+
+      expect(log.log, isEmpty);
+      expect(find.text('Enter a valid email address'), findsOneWidget);
+    });
+  });
+
+  group('ResetPasswordPage', () {
+    const resetStubs = <String, StubbedResponse>{
+      'POST /api/auth/reset-password': StubbedResponse.ok({
+        'message': 'Password reset successfully',
+      }),
+    };
+
+    Future<FakeApiAdapter> pumpReset(
+      WidgetTester tester,
+      Map<String, StubbedResponse> stubs,
+    ) => pumpRecoveryRoute(tester, stubs, '/reset-password');
+
+    Future<void> fillRecoveryForm(
+      WidgetTester tester, {
+      String code = '246813',
+      String fresh = 'Recovered!23',
+      String confirm = 'Recovered!23',
+    }) async {
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Registered email'),
+        'george@example.com',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Reset code'),
+        code,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'New password'),
+        fresh,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Confirm new password'),
+        confirm,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Reset password'));
+    }
+
+    testWidgets('exchanges the code for a password and ends at login', (
+      tester,
+    ) async {
+      final log = await pumpReset(tester, resetStubs);
+
+      await fillRecoveryForm(tester);
+      await tester.pumpAndSettle();
+
+      final body = log.log
+          .firstWhere((entry) => entry.key == 'POST /api/auth/reset-password')
+          .body;
+      expect(body.keys, ['email', 'code', 'newPassword', 'confirmPassword']);
+      expect(body['code'], '246813');
+
+      expect(find.text('Set a new password'), findsNothing);
+    });
+
+    testWidgets('a wrong code is refused, and the secrets are wiped', (
+      tester,
+    ) async {
+      await pumpReset(tester, {
+        'POST /api/auth/reset-password': const StubbedResponse(401, {
+          'message': 'Reset code does not match',
+        }),
+      });
+
+      await fillRecoveryForm(tester, code: '111111');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Reset code does not match'), findsOneWidget);
+      expect(find.text('Set a new password'), findsOneWidget);
+
+      for (final label in [
+        'Reset code',
+        'New password',
+        'Confirm new password',
+      ]) {
+        final field = tester.widget<TextFormField>(
+          find.widgetWithText(TextFormField, label),
+        );
+        expect(field.controller!.text, isEmpty, reason: label);
+      }
+
+      expect(
+        tester
+            .widget<TextFormField>(
+              find.widgetWithText(TextFormField, 'Registered email'),
+            )
+            .controller!
+            .text,
+        'george@example.com',
+        reason: 'the address is not a secret worth retyping',
+      );
+    });
+
+    testWidgets('catches mismatched passwords before the network', (
+      tester,
+    ) async {
+      final log = await pumpReset(tester, resetStubs);
+
+      await fillRecoveryForm(tester, confirm: 'SomethingElse!23');
+      await tester.pumpAndSettle();
+
+      expect(
+        log.log.where((entry) => entry.key == 'POST /api/auth/reset-password'),
+        isEmpty,
+      );
+      expect(find.text('Passwords do not match'), findsOneWidget);
+    });
+
+    testWidgets('rejects a code that is not six digits, without a request', (
+      tester,
+    ) async {
+      final log = await pumpReset(tester, resetStubs);
+
+      await fillRecoveryForm(tester, code: '12345');
+      await tester.pumpAndSettle();
+
+      expect(
+        log.log.where((entry) => entry.key == 'POST /api/auth/reset-password'),
+        isEmpty,
+      );
+    });
+  });
+
+  group('ChangePasswordPage', () {
+    Future<FakeApiAdapter> pumpChangePasswordPage(
+      WidgetTester tester,
+      Map<String, StubbedResponse> stubs,
+    ) async {
+      final client = buildFakeClient(stubs);
+      final container = ProviderContainer(
+        overrides: [
+          apiClientProvider.overrideWithValue(client),
+          tokenStorageProvider.overrideWithValue(
+            FakeTokenStorage(token: 'jwt'),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(
+            routerConfig: GoRouter(
+              initialLocation: '/change-password',
+              routes: [
+                GoRoute(
+                  path: '/',
+                  builder: (context, state) => const SizedBox.shrink(),
+                  routes: [
+                    GoRoute(
+                      path: 'change-password',
+                      builder: (context, state) => const ChangePasswordPage(),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      return client.dio.httpClientAdapter as FakeApiAdapter;
+    }
+
+    Future<void> fillChangeForm(
+      WidgetTester tester, {
+      String current = 'OldPass!23',
+      String fresh = 'NewPass!23',
+      String confirm = 'NewPass!23',
+    }) async {
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Current password'),
+        current,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'New password'),
+        fresh,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Confirm new password'),
+        confirm,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Update password'));
+    }
+
+    testWidgets('puts all three entries in one request and leaves on 2xx', (
+      tester,
+    ) async {
+      final log = await pumpChangePasswordPage(tester, {
+        'PUT /api/auth/change-password': const StubbedResponse(200, {
+          'message': 'Password changed successfully',
+        }),
+      });
+
+      await fillChangeForm(tester);
+      await tester.pumpAndSettle();
+
+      final body = log.log
+          .firstWhere((entry) => entry.key == 'PUT /api/auth/change-password')
+          .body;
+      expect(body.keys, ['currentPassword', 'newPassword', 'confirmPassword']);
+      expect(body['currentPassword'], 'OldPass!23');
+      expect(body['newPassword'], 'NewPass!23');
+
+      expect(
+        find.text('Change password'),
+        findsNothing,
+        reason: 'only a 2xx may leave the screen',
+      );
+    });
+
+    testWidgets('shows why a wrong current password is refused, and stays', (
+      tester,
+    ) async {
+      await pumpChangePasswordPage(tester, {
+        'PUT /api/auth/change-password': const StubbedResponse(401, {
+          'message': 'Current password does not match',
+        }),
+      });
+
+      await fillChangeForm(tester, current: 'not-the-password');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Current password does not match'), findsOneWidget);
+      expect(find.text('Change password'), findsOneWidget);
+
+      for (final label in [
+        'Current password',
+        'New password',
+        'Confirm new password',
+      ]) {
+        final field = tester.widget<TextFormField>(
+          find.widgetWithText(TextFormField, label),
+        );
+        expect(field.controller!.text, isEmpty, reason: label);
+      }
+    });
+
+    testWidgets('catches a mistyped confirmation before the network', (
+      tester,
+    ) async {
+      final log = await pumpChangePasswordPage(tester, {
+        'PUT /api/auth/change-password': const StubbedResponse(200, {
+          'message': 'Password changed successfully',
+        }),
+      });
+
+      await fillChangeForm(tester, confirm: 'NewPass!24');
+      await tester.pumpAndSettle();
+
+      expect(
+        log.log.where((entry) => entry.key == 'PUT /api/auth/change-password'),
+        isEmpty,
+      );
+      expect(find.text('Passwords do not match'), findsOneWidget);
     });
   });
 
