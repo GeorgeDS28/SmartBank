@@ -8,12 +8,14 @@ import java.io.IOException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import com.smartbank.auth.jwt.JwtService;
 
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -56,51 +58,55 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // Extract JWT token
         jwt = authHeader.substring(7);
 
-    
-        // Extract email from token
-        email = jwtService.extractEmail(jwt);
+        try {
+            // Extract email from token
+            email = jwtService.extractEmail(jwt);
 
+            log.debug("JWT email extracted successfully");
 
-       log.debug("JWT email extracted successfully");
+            // Authenticate only if not already authenticated
+            if (email != null &&
+                    SecurityContextHolder.getContext().getAuthentication() == null) {
 
-        // Authenticate only if not already authenticated
-        if (email != null &&
-                SecurityContextHolder.getContext().getAuthentication() == null) {
-            
-            UserDetails userDetails =
-                    userDetailsService.loadUserByUsername(email);
+                UserDetails userDetails =
+                        userDetailsService.loadUserByUsername(email);
 
-    
-            boolean valid = jwtService.isTokenValid(jwt, userDetails.getUsername());
+                boolean valid = jwtService.isTokenValid(jwt, userDetails.getUsername());
 
+                if (!valid) {
+                    log.warn("Invalid JWT token");
+                } else {
 
-    
-    if (!valid){
-         log.warn("Invalid JWT token");
-    }
-    else {
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails,
+                                    null,
+                                    userDetails.getAuthorities());
 
-        UsernamePasswordAuthenticationToken authToken =
-                new UsernamePasswordAuthenticationToken(
-                        userDetails,
-                        null,
-                        userDetails.getAuthorities());
+                    authToken.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request));
 
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
 
-         authToken.setDetails(
-                new WebAuthenticationDetailsSource().buildDetails(request));
-
-
-
-        SecurityContextHolder.getContext().setAuthentication(authToken);
-
-        log.debug("JWT authentication successful");
-    }
-
+                    log.debug("JWT authentication successful");
                 }
+            }
+        } catch (JwtException | IllegalArgumentException e) {
+            // Malformed, expired or forged bearer token. Nothing here may
+            // escape: this filter runs before the MVC exception handling the
+            // controllers get, so an uncaught throw becomes a container-made
+            // 500 rather than the 401 the client can act on.
+            log.debug("Rejected bearer token ({})", e.getClass().getSimpleName());
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        } catch (UsernameNotFoundException e) {
+            // Signed by us but naming a subject that no longer exists.
+            log.debug("Rejected bearer token: unknown subject");
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
 
-
-            filterChain.doFilter(request, response);
+        filterChain.doFilter(request, response);
 
                 }// end of doFilterInternal method
                 
