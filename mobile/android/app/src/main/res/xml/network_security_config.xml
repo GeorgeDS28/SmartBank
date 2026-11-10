@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android refuses plain HTTP by default. Instead of switching it off
+     everywhere, allow it only for the development machine on the home
+     network. If the router assigns a new address, update this one host. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false"/>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.1.105</domain>
+    </domain-config>
+</network-security-config>
