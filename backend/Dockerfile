@@ -35,6 +35,13 @@ ENV JAVA_OPTS="-XX:MaxRAMPercentage=75"
 
 EXPOSE 8080
 
+# Shell form, because the port has to come from PORT at probe time: a fixed
+# 8080 here would report every Render container unhealthy once the platform
+# injects 10000. start-period covers the measured 20-26 second Spring Boot
+# startup, so a slow boot is not mistaken for a dead one.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/actuator/health" || exit 1
+
 # exec keeps the JVM as PID 1 so it receives shutdown signals instead of being
 # orphaned behind the shell. JAVA_OPTS is expanded at runtime, so overriding it
 # with -e JAVA_OPTS=... works without rebuilding.

@@ -63,6 +63,13 @@ public class SecurityConfig {
                         // Error endpoint
                         .requestMatchers("/error").permitAll()
 
+                        // Liveness only, listed as an exact path for the same
+                        // reason as the auth routes: a future /actuator/**
+                        // rule would silently publish /env and /heapdump.
+                        // Details stay suppressed by the default
+                        // show-details=never, so this reveals UP or DOWN.
+                        .requestMatchers("/actuator/health").permitAll()
+
                         // Swagger
                         .requestMatchers("/swagger-ui/**").permitAll()
                         .requestMatchers("/swagger-ui.html").permitAll()
