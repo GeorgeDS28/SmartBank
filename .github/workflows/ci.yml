@@ -200,6 +200,20 @@ jobs:
           expect "accounts with a token are served" 200 \
             "$(code_of "$OUT/body" -H "Authorization: Bearer $token" "$API/api/accounts")"
 
+          echo "Unusable bearer tokens"
+          # A filter that throws is not covered by the controllers' exception
+          # handling, so these used to surface as container-made 500s.
+          expect "unparsable token is refused, not a server error" 401 \
+            "$(code_of "$OUT/body" -H 'Authorization: Bearer not.a.jwt' "$API/api/accounts")"
+          # Replacing the whole signature segment, not one character of it: the
+          # final base64 character carries bits the decoder discards, so a
+          # single-character edit can leave the verified bytes untouched and
+          # still return 200.
+          expect "forged signature is refused" 401 \
+            "$(code_of "$OUT/body" \
+              -H "Authorization: Bearer ${token%.*}.$(printf 'A%.0s' $(seq 1 100))" \
+              "$API/api/accounts")"
+
           if [ "$failed" -ne 0 ]; then
             echo "$failed integration assertion(s) failed"
             docker logs app
