@@ -65,6 +65,13 @@
     <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
+		<!-- Health probe for container platforms. Version comes from the
+		     spring-boot-starter-parent, so it is deliberately not pinned here. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
 		<!-- Password reset codes are delivered over SMTP. -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
